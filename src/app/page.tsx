@@ -2,6 +2,7 @@ import GeneratorForm from "@/components/generator-form"
 import { getRecentSpecs } from "@/app/actions"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default async function Home() {
   const recentSpecs = await getRecentSpecs()
@@ -12,13 +13,14 @@ export default async function Home() {
         <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-teal-400">
           Tasks Generator
         </h1>
-        <nav className="flex gap-4">
+        <nav className="flex gap-4 items-center">
           <Link href="/history">
             <Button variant="ghost">History</Button>
           </Link>
           <Link href="/status">
             <Button variant="ghost">Status</Button>
           </Link>
+          <ThemeToggle />
         </nav>
       </header>
 
