@@ -32,7 +32,7 @@ const UserStorySchema = z.object({
 const SpecSchema = z.object({
     userStories: z.array(UserStorySchema),
     tasks: z.array(TaskSchema),
-    riskAnalysis: z.string().optional(), // "Make it your own" feature
+    riskAnalysis: z.string().optional(),
 })
 
 export async function generateSpecAction(prevState: any, formData: FormData) {
@@ -51,6 +51,43 @@ export async function generateSpecAction(prevState: any, formData: FormData) {
 
     const { goal: vGoal, users: vUsers, constraints: vConstraints } = validatedFields.data
 
+    // Mock Data fallback if no API key
+    if (!process.env.OPENAI_API_KEY) {
+        console.log("No OPENAI_API_KEY found. Identifying as Mock Mode.")
+        // Wait a bit to simulate API delay
+        await new Promise(resolve => setTimeout(resolve, 1500))
+
+        const mockData = {
+            userStories: [
+                { id: 'us-1', asA: 'User', iWant: 'to see a demo', soThat: 'I can evaluate the app without an API key' },
+                { id: 'us-2', asA: 'Developer', iWant: 'fallback data', soThat: 'the app handles errors gracefully' }
+            ],
+            tasks: [
+                { id: 't-1', title: 'Implement Mock Mode', description: 'Add a fallback when API key is missing', type: 'feature', estimate: '1h' },
+                { id: 't-2', title: 'Verify UI', description: 'Check if the cards render correctly with mock data', type: 'chore', estimate: '30m' }
+            ],
+            riskAnalysis: "This is a GENERATED MOCK RESPONSE because no OpenAI API Key was found in .env. Real risk analysis requires the AI model."
+        }
+
+        try {
+            await prisma.generatedSpec.create({
+                data: {
+                    goal: vGoal,
+                    users: vUsers,
+                    constraints: vConstraints,
+                    userStories: JSON.stringify(mockData.userStories),
+                    tasks: JSON.stringify(mockData.tasks),
+                    createdAt: new Date(),
+                },
+            })
+            revalidatePath('/history')
+        } catch (e) {
+            console.error("Mock DB create error", e)
+        }
+
+        return { success: true, data: mockData, isMock: true }
+    }
+
     try {
         const prompt = `
       Goal: ${vGoal}
@@ -61,14 +98,12 @@ export async function generateSpecAction(prevState: any, formData: FormData) {
       Also provide a brief risk analysis.
     `
 
-        // Start AI generation
         const { object } = await generateObject({
-            model: openai('gpt-4-turbo'), // or gpt-3.5-turbo depends on key availability
+            model: openai('gpt-4-turbo'),
             schema: SpecSchema,
             prompt: prompt,
         })
 
-        // Save to DB
         try {
             await prisma.generatedSpec.create({
                 data: {
@@ -83,7 +118,6 @@ export async function generateSpecAction(prevState: any, formData: FormData) {
             revalidatePath('/history')
         } catch (dbError) {
             console.error("DB Error:", dbError)
-            // Continue returning result even if DB fails, but warn?
         }
 
         return {
