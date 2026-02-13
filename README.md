@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Tasks Generator
 
-## Getting Started
+A web application that helps you plan software features by generating user stories and engineering tasks using AI.
 
-First, run the development server:
+## How to Run
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1.  **Clone the repository** (if not already local).
+2.  **Install dependencies**:
+    ```bash
+    npm install
+    ```
+3.  **Setup Environment Variables**:
+    - Copy `.env.example` to `.env`
+    - Add your OpenAI API Key to `OPENAI_API_KEY`
+    - Ensure `DATABASE_URL` is set (defaults to local SQLite `file:./dev.db`)
+4.  **Initialize Database**:
+    ```bash
+    npx prisma generate
+    npx prisma db push
+    ```
+5.  **Run Development Server**:
+    ```bash
+    npm run dev
+    ```
+6.  Open [http://localhost:3000](http://localhost:3000)
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Docker Run (One Command)
+If you prefer to run with Docker:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1.  Make sure you have `OPENAI_API_KEY` set in your `.env` or pass it inline.
+2.  Run:
+    ```bash
+    docker-compose up --build
+    ```
+3.  Open [http://localhost:3000](http://localhost:3000)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Features (Done)
+- [x] **Feature Generation**: Input goal/users/constraints -> Get User Stories & Tasks.
+- [x] **Task Editor**: Edit generate tasks, reorder them, grouping support (via types).
+- [x] **Export**: Copy to clipboard or download as Markdown.
+- [x] **History**: View last 5 generated specs.
+- [x] **Status Page**: Check DB and LLM connectivity.
+- [x] **Risk Analysis**: AI provides a brief risk assessment.
 
-## Learn More
+## Features (Not Done / Future Work)
+- [ ] User Authentication (currently open access).
+- [ ] Drag and Drop reordering (currently using buttons).
+- [ ] Persistent modifications (editing only affects local view until re-generated, save functionality for edits is not fully implemented in DB, only initial generation is saved).
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Tech Stack
+- **Framework**: Next.js 14 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS + Shadcn/UI philosophy
+- **AI**: OpenAI API + Vercel AI SDK
+- **Database**: Prisma + SQLite (dev) / PostgreSQL (prod ready)

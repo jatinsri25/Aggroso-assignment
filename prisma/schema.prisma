@@ -1,0 +1,18 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model GeneratedSpec {
+  id          String   @id @default(cuid())
+  goal        String
+  users       String
+  constraints String?
+  userStories String   // Stored as JSON string due to SQLite compatibility for ease of dev
+  tasks       String   // Stored as JSON string
+  createdAt   DateTime @default(now())
+}
