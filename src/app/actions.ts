@@ -51,22 +51,21 @@ export async function generateSpecAction(prevState: any, formData: FormData) {
 
     const { goal: vGoal, users: vUsers, constraints: vConstraints } = validatedFields.data
 
-    // Mock Data fallback if no API key
-    if (!process.env.OPENAI_API_KEY) {
-        console.log("No OPENAI_API_KEY found. Identifying as Mock Mode.")
-        // Wait a bit to simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 1500))
+    // Mock Data Generator Helper
+    const generateMockData = async () => {
+        console.log("Generating Mock Data fallback...")
+        await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate delay
 
         const mockData = {
             userStories: [
-                { id: 'us-1', asA: 'User', iWant: 'to see a demo', soThat: 'I can evaluate the app without an API key' },
-                { id: 'us-2', asA: 'Developer', iWant: 'fallback data', soThat: 'the app handles errors gracefully' }
+                { id: 'us-1', asA: 'User', iWant: 'to see a demo', soThat: 'I can evaluate the app without a working API key' },
+                { id: 'us-2', asA: 'Developer', iWant: 'fallback data', soThat: 'the app handles API errors gracefully' }
             ],
             tasks: [
-                { id: 't-1', title: 'Implement Mock Mode', description: 'Add a fallback when API key is missing', type: 'feature', estimate: '1h' },
-                { id: 't-2', title: 'Verify UI', description: 'Check if the cards render correctly with mock data', type: 'chore', estimate: '30m' }
+                { id: 't-1', title: 'Check OpenAI Key', description: 'The provided API Key might be invalid or out of credits.', type: 'chore', estimate: '15m' },
+                { id: 't-2', title: 'Verify Billing', description: 'Check OpenAI platform billing settings.', type: 'chore', estimate: '5m' }
             ],
-            riskAnalysis: "This is a GENERATED MOCK RESPONSE because no OpenAI API Key was found in .env. Real risk analysis requires the AI model."
+            riskAnalysis: "This is a FALLBACK RESPONSE because the OpenAI API call failed (Invalid Key or Quota Exceeded). Check your Vercel logs."
         }
 
         try {
@@ -88,13 +87,19 @@ export async function generateSpecAction(prevState: any, formData: FormData) {
         return { success: true, data: mockData, isMock: true }
     }
 
+    // Explicit Mock Mode if no key
+    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === "") {
+        console.log("No OPENAI_API_KEY found. Using Mock Mode.")
+        return await generateMockData()
+    }
+
     try {
         const prompt = `
       Goal: ${vGoal}
       Target Users: ${vUsers}
       Constraints: ${vConstraints || 'None'}
 
-      Generate a list of user stories and engineering tasks for this feature. 
+      Generate a list of user stories and engineering tasks for this feature.
       Also provide a brief risk analysis.
     `
 
@@ -126,10 +131,9 @@ export async function generateSpecAction(prevState: any, formData: FormData) {
         }
 
     } catch (error) {
-        console.error("AI Error:", error)
-        return {
-            message: 'Failed to generate content. Please check API key/service status.',
-        }
+        console.error("AI Error (Falling back to mock):", error)
+        // Fallback to mock data on ANY error
+        return await generateMockData()
     }
 }
 
