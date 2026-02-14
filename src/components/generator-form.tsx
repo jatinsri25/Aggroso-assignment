@@ -57,7 +57,7 @@ export default function GeneratorForm() {
             if (result?.success && result.data) {
                 setSpec(result.data as Spec)
             } else {
-                setError(result?.message || "Something went wrong")
+                setError((result as any)?.message || "Something went wrong")
             }
         })
     }
