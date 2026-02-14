@@ -99,7 +99,7 @@ export async function generateSpecAction(prevState: any, formData: FormData) {
     `
 
         const { object } = await generateObject({
-            model: openai('gpt-4-turbo'),
+            model: openai('gpt-4o-mini'),
             schema: SpecSchema,
             prompt: prompt,
         })
