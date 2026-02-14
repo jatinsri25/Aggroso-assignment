@@ -41,6 +41,9 @@ If you prefer to run with Docker:
 - [x] **History**: View last 5 generated specs.
 - [x] **Status Page**: Check DB and LLM connectivity.
 - [x] **Risk Analysis**: AI provides a brief risk assessment.
+- [x] **Templates**: Quick-start templates for common app types.
+- [x] **Mock Mode**: Fallback generation when API key is missing.
+- [x] **Dark Mode**: Toggle between light and dark themes.
 
 ## Features (Not Done / Future Work)
 - [ ] User Authentication (currently open access).
