@@ -262,7 +262,7 @@ ${spec.riskAnalysis || 'None provided'}
                     <div className="space-y-4">
                         <div className="flex justify-between items-center border-b pb-2">
                             <h3 className="text-xl font-semibold">Engineering Tasks</h3>
-                            <Button size="sm" onClick={addTask} variant="secondary"><Plus className="h-4 w-4 mr-1" /> Add Task</Button>
+                            <Button size="sm" onClick={addTask} variant="outline"><Plus className="h-4 w-4 mr-1" /> Add Task</Button>
                         </div>
 
                         <div className="space-y-3">
