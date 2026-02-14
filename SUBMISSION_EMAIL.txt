@@ -1,0 +1,35 @@
+Subject: Submission: Jatin Srivastava - Tasks Generator (Problem A)
+
+Hi,
+
+Here is my submission for the **Tasks Generator (Problem A)** project.
+
+**Links:**
+*   **GitHub Repository**: https://github.com/jatinsri25/Aggroso-assignment
+*   **Live Link**: [INSERT_YOUR_VERCEL_OR_DEPLOYMENT_LINK_HERE]
+    *(If you run locally or want to test without setup: use `docker-compose up --build`)*
+
+**Features Implemented:**
+*   **Core Functionality**: Generates User Stories & Engineering Tasks based on Goal, Users, and Constraints.
+*   **AI Integration**: Uses `gpt-4-turbo` via Vercel AI SDK for structured JSON output.
+*   **Task Management**: Edit, reorder, group, and delete tasks.
+*   **Persistence**: Saves history to a local SQLite database (Production-ready for Postgres).
+*   **Export**: Copy to clipboard or download as Markdown.
+
+**"Make it your own" / Extra Polish:**
+*   **Dark Mode**: Full dark mode support with a toggle switch.
+*   **Templates**: Quick-start templates (Mobile App, Admin Dashboard, etc.) to pre-fill the form.
+*   **Mock Mode**: Implemented a robust fallback mode. If no API Key is provided, the app generates sample data instead of crashing, allowing you to test the UI flow easily.
+*   **Risk Analysis**: AI provides a brief risk assessment section.
+*   **Animations**: Smooth UI transitions using `framer-motion`.
+
+**Code Quality:**
+*   **Tech Stack**: Next.js 14, TypeScript, Tailwind CSS, Prisma, Shadcn/UI.
+*   **Documentation**: Includes `README.md` (Setup), `AI_NOTES.md` (AI usage), and `PROMPTS_USED.md`.
+*   **Testing**: Manually verified all flows, including error handling and empty states.
+
+Thank you for the opportunity!
+
+Best regards,
+Jatin Srivastava
+[Link to Portfolio/Cl]
