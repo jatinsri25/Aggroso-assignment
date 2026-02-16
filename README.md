@@ -1,6 +1,6 @@
 A web application that helps you plan software features by generating user stories and engineering tasks using AI.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjatinsri25%2FAggroso-assignment&env=OPENAI_API_KEY,DATABASE_URL)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fjatinsri25%2FAggroso-assignment&env=GOOGLE_GENERATIVE_AI_API_KEY,DATABASE_URL)
 
 ## How to Run
 
@@ -11,7 +11,7 @@ A web application that helps you plan software features by generating user stori
     ```
 3.  **Setup Environment Variables**:
     - Copy `.env.example` to `.env`
-    - Add your OpenAI API Key to `OPENAI_API_KEY`
+    - Add your Gemini API Key to `GOOGLE_GENERATIVE_AI_API_KEY`
     - Ensure `DATABASE_URL` is set (defaults to local SQLite `file:./dev.db`)
 4.  **Initialize Database**:
     ```bash
@@ -27,7 +27,7 @@ A web application that helps you plan software features by generating user stori
 ## Docker Run (One Command)
 If you prefer to run with Docker:
 
-1.  Make sure you have `OPENAI_API_KEY` set in your `.env` or pass it inline.
+1.  Make sure you have `GOOGLE_GENERATIVE_AI_API_KEY` set in your `.env` or pass it inline.
 2.  Run:
     ```bash
     docker-compose up --build
@@ -54,5 +54,5 @@ If you prefer to run with Docker:
 - **Framework**: Next.js 14 (App Router)
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS + Shadcn/UI philosophy
-- **AI**: OpenAI API + Vercel AI SDK
+- **AI**: Google Gemini API + Vercel AI SDK
 - **Database**: Prisma + SQLite (dev) / PostgreSQL (prod ready)

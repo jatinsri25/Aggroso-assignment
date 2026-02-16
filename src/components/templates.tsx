@@ -1,7 +1,6 @@
 'use client'
 
 import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { BookTemplate, Code, Briefcase } from "lucide-react"
 
 const TEMPLATES = [
@@ -37,19 +36,25 @@ const TEMPLATES = [
     }
 ]
 
-export function Templates({ onSelect }: { onSelect: (data: any) => void }) {
+type TemplateData = {
+    goal: string
+    users: string
+    constraints: string
+}
+
+export function Templates({ onSelect }: { onSelect: (data: TemplateData) => void }) {
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
             {TEMPLATES.map(t => (
                 <Button
                     key={t.id}
                     variant="outline"
-                    className="h-auto py-3 justify-start"
+                    className="h-auto justify-start rounded-xl border-cyan-300/25 bg-card/65 px-4 py-3 text-left hover:border-cyan-300/55 hover:bg-cyan-200/10"
                     onClick={() => onSelect(t.data)}
                 >
                     {t.icon}
                     <div className="flex flex-col items-start">
-                        <span className="font-semibold">{t.label}</span>
+                        <span className="font-semibold tracking-[0.01em]">{t.label}</span>
                     </div>
                 </Button>
             ))}

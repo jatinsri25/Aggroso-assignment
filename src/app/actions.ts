@@ -1,10 +1,11 @@
 'use server'
 
 import { prisma } from '@/lib/db'
-import { openai } from '@ai-sdk/openai'
+import { google } from '@ai-sdk/google'
 import { generateObject } from 'ai'
 import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
+import { rateLimit } from '@/lib/ratelimit'
 
 // Schema for the input
 const InputSchema = z.object({
@@ -13,7 +14,14 @@ const InputSchema = z.object({
     constraints: z.string().optional(),
 })
 
-// Schema for the output (AI generation)
+// Schema for the Strategy (Step 1)
+const StrategySchema = z.object({
+    analysis: z.string().describe("A brief analysis of the user's request, identifying complexity and key challenges."),
+    architecture: z.string().describe("High-level architectural approach or design patterns recommended."),
+    edgeCases: z.array(z.string()).describe("Potential edge cases or risks to consider."),
+})
+
+// Schema for the output (AI generation - Step 2)
 const TaskSchema = z.object({
     id: z.string(),
     title: z.string(),
@@ -35,10 +43,40 @@ const SpecSchema = z.object({
     riskAnalysis: z.string().optional(),
 })
 
+const geminiModelIds = ['gemini-flash-latest', 'gemini-2.0-flash']
+
+function getErrorMessage(error: unknown): string {
+    if (error instanceof Error) return error.message
+    return String(error)
+}
+
+function isRecoverableGeminiError(error: unknown): boolean {
+    const message = getErrorMessage(error).toLowerCase()
+    return (
+        message.includes('not found') ||
+        message.includes('not supported') ||
+        message.includes('listmodels') ||
+        message.includes('unknown model') ||
+        message.includes('quota exceeded')
+    )
+}
+
 export async function generateSpecAction(prevState: any, formData: FormData) {
     const goal = formData.get('goal') as string
     const users = formData.get('users') as string
-    const constraints = formData.get('constraints') as string
+    const constraints = formData.get('constraints') as string || undefined
+    console.log("DEBUG: Received Form Data", { goal, users, modelProvider: 'gemini' });
+
+    // 1. Rate Limiting
+    const limitParams = { interval: 60 * 1000, limit: 5 }; // 5 requests per minute
+    const rateLimitResult = await rateLimit('global_demo_user', limitParams);
+
+    if (!rateLimitResult.success) {
+        return {
+            message: `Rate limit exceeded. Please try again in ${Math.ceil((rateLimitResult.reset - Date.now()) / 1000)} seconds.`,
+            errors: { goal: ["Too many requests. Please wait."] }
+        }
+    }
 
     const validatedFields = InputSchema.safeParse({ goal, users, constraints })
 
@@ -52,8 +90,8 @@ export async function generateSpecAction(prevState: any, formData: FormData) {
     const { goal: vGoal, users: vUsers, constraints: vConstraints } = validatedFields.data
 
     // Mock Data Generator Helper
-    const generateMockData = async () => {
-        console.log("Generating Mock Data fallback...")
+    const generateMockData = async (reason: string) => {
+        console.log("Generating Mock Data fallback...", reason)
         await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate delay
 
         const mockData = {
@@ -62,10 +100,10 @@ export async function generateSpecAction(prevState: any, formData: FormData) {
                 { id: 'us-2', asA: 'Developer', iWant: 'fallback data', soThat: 'the app handles API errors gracefully' }
             ],
             tasks: [
-                { id: 't-1', title: 'Check OpenAI Key', description: 'The provided API Key might be invalid or out of credits.', type: 'chore', estimate: '15m' },
-                { id: 't-2', title: 'Verify Billing', description: 'Check OpenAI platform billing settings.', type: 'chore', estimate: '5m' }
+                { id: 't-1', title: 'Check API Key', description: `Failed to use Gemini. Reason: ${reason}`, type: 'chore', estimate: '15m' },
+                { id: 't-2', title: 'Verify Billing', description: 'Check your Gemini API billing/plan settings.', type: 'chore', estimate: '5m' }
             ],
-            riskAnalysis: "This is a FALLBACK RESPONSE because the OpenAI API call failed (Invalid Key or Quota Exceeded). Check your Vercel logs."
+            riskAnalysis: "This is a FALLBACK RESPONSE because the AI API call failed. Check your logs."
         }
 
         try {
@@ -84,57 +122,97 @@ export async function generateSpecAction(prevState: any, formData: FormData) {
             console.error("Mock DB create error", e)
         }
 
-        return { success: true, data: mockData, isMock: true }
+        return { success: true, data: mockData, isMock: true, message: `Demo Mode: ${reason}`, strategy: undefined }
     }
 
-    // Explicit Mock Mode if no key
-    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === "") {
-        console.log("No OPENAI_API_KEY found. Using Mock Mode.")
-        return await generateMockData()
+    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+        return await generateMockData("Missing GOOGLE_GENERATIVE_AI_API_KEY")
     }
 
-    try {
-        const prompt = `
-      Goal: ${vGoal}
-      Target Users: ${vUsers}
-      Constraints: ${vConstraints || 'None'}
+    const strategyPrompt = `
+            Analyze this request:
+            Goal: ${vGoal}
+            Target Users: ${vUsers}
+            Constraints: ${vConstraints || 'None'}
+            
+            Identify the core challenges, edge cases, and architectural patterns needed.
+        `
 
-      Generate a list of user stories and engineering tasks for this feature.
-      Also provide a brief risk analysis.
-    `
+    const taskPromptTemplate = (strategy: z.infer<typeof StrategySchema>) => `
+            Based on the following strategy, generate detailed user stories and tasks.
+            
+            Strategy Analysis: ${strategy.analysis}
+            Architecture: ${strategy.architecture}
+            Edge Cases to Cover: ${strategy.edgeCases.join(', ')}
+            
+            Original Goal: ${vGoal}
+            Users: ${vUsers}
+            Constraints: ${vConstraints}
+        `
 
-        const { object } = await generateObject({
-            model: openai('gpt-4o-mini'),
-            schema: SpecSchema,
-            prompt: prompt,
-        })
+    const candidateModels = geminiModelIds
+    let lastError: unknown = undefined
+
+    for (let i = 0; i < candidateModels.length; i++) {
+        const candidateModelId = candidateModels[i]
+        const model = google(candidateModelId)
 
         try {
-            await prisma.generatedSpec.create({
-                data: {
-                    goal: vGoal,
-                    users: vUsers,
-                    constraints: vConstraints,
-                    userStories: JSON.stringify(object.userStories),
-                    tasks: JSON.stringify(object.tasks),
-                    createdAt: new Date(),
-                },
+            // --- Step 1: Strategist Agent ---
+            const { object: strategy } = await generateObject({
+                model: model,
+                schema: StrategySchema,
+                prompt: strategyPrompt,
             })
-            revalidatePath('/history')
-        } catch (dbError) {
-            console.error("DB Error:", dbError)
-        }
 
-        return {
-            success: true,
-            data: object,
-        }
+            console.log("Strategy Generated:", strategy)
 
-    } catch (error) {
-        console.error("AI Error (Falling back to mock):", error)
-        // Fallback to mock data on ANY error
-        return await generateMockData()
+            // --- Step 2: Generator Agent ---
+            const { object: spec } = await generateObject({
+                model: model,
+                schema: SpecSchema,
+                prompt: taskPromptTemplate(strategy),
+            })
+
+            try {
+                await prisma.generatedSpec.create({
+                    data: {
+                        goal: vGoal,
+                        users: vUsers,
+                        constraints: vConstraints,
+                        userStories: JSON.stringify(spec.userStories),
+                        tasks: JSON.stringify(spec.tasks),
+                        createdAt: new Date(),
+                    },
+                })
+                revalidatePath('/history')
+            } catch (dbError) {
+                console.error("DB Error:", dbError)
+            }
+
+            const modelSwitchMessage = i > 0
+                ? `Primary Gemini model unavailable; retried with ${candidateModelId}.`
+                : undefined
+
+            return {
+                success: true,
+                data: spec,
+                strategy: strategy,
+                message: modelSwitchMessage
+            }
+        } catch (error: unknown) {
+            lastError = error
+            const canRetryModel = i < candidateModels.length - 1 && isRecoverableGeminiError(error)
+            if (canRetryModel) {
+                console.warn(`Model ${candidateModelId} unavailable for Gemini. Retrying with next model.`)
+                continue
+            }
+            break
+        }
     }
+
+    console.error("AI Error:", lastError)
+    return await generateMockData(getErrorMessage(lastError) || "Unknown AI Error")
 }
 
 export async function getRecentSpecs() {

@@ -1,13 +1,10 @@
 import { prisma } from '@/lib/db'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { Badge } from 'lucide-react'
-
-// Note: Badge is not in lucide-react. I'll use a simple span or create a badge component later if needed.
-// For now, simple text color is fine.
+import Link from 'next/link'
 
 export default async function StatusPage() {
     let dbStatus = 'Unknown'
-    let llmStatus = 'Unknown'
+    const geminiConfigured = Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY)
 
     // Check DB
     try {
@@ -18,20 +15,21 @@ export default async function StatusPage() {
         dbStatus = 'Unhealthy'
     }
 
-    // Check LLM
-    if (process.env.OPENAI_API_KEY) {
-        llmStatus = 'Configured (Ready)'
-    } else {
-        llmStatus = 'Missing API Key'
-    }
-
     return (
-        <div className="container mx-auto p-8 max-w-2xl">
-            <h1 className="text-3xl font-bold mb-8">System Status</h1>
+        <div className="mx-auto max-w-3xl px-5 py-10 md:px-8">
+            <div className="mb-8 flex items-end justify-between">
+                <div>
+                    <h1 className="hero-gradient text-4xl font-bold">System Status</h1>
+                    <p className="mt-2 text-sm text-muted-foreground">Live checks for database, provider setup, and runtime health.</p>
+                </div>
+                <Link href="/" className="text-sm font-semibold text-cyan-700 hover:text-cyan-500 dark:text-cyan-300 dark:hover:text-cyan-200">
+                    Back to Generator
+                </Link>
+            </div>
             <div className="grid gap-4">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Database Connection</CardTitle>
+                        <CardTitle className="text-lg">Database Connection</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="flex items-center gap-2">
@@ -44,20 +42,20 @@ export default async function StatusPage() {
 
                 <Card>
                     <CardHeader>
-                        <CardTitle>LLM Connection (OpenAI)</CardTitle>
+                        <CardTitle className="text-lg">LLM Provider</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="flex items-center gap-2">
-                            <div className={`h-3 w-3 rounded-full ${llmStatus.includes('Ready') ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                            <span>{llmStatus}</span>
+                            <div className={`h-3 w-3 rounded-full ${geminiConfigured ? 'bg-green-500' : 'bg-yellow-500'}`} />
+                            <span>{geminiConfigured ? 'Configured: gemini' : 'Missing GOOGLE_GENERATIVE_AI_API_KEY'}</span>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-2">Verifying API Key presence. (Actual connectivity check requires a request)</p>
+                        <p className="text-xs text-muted-foreground mt-2">Verifying Gemini API key presence. (Actual connectivity check requires a request)</p>
                     </CardContent>
                 </Card>
 
                 <Card>
                     <CardHeader>
-                        <CardTitle>Backend Health</CardTitle>
+                        <CardTitle className="text-lg">Backend Health</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="flex items-center gap-2">
@@ -68,7 +66,6 @@ export default async function StatusPage() {
                     </CardContent>
                 </Card>
             </div>
-            <a href="/" className="block mt-8 text-center text-blue-500 hover:underline">Back to Generator</a>
         </div>
     )
 }
