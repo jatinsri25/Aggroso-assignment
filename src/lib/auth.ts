@@ -64,8 +64,15 @@ function getPrismaAuthDelegate(): PrismaAuthDelegate | null {
 
 function getErrorCode(error: unknown): string | null {
   if (typeof error !== 'object' || error === null) return null
-  const withCode = error as { code?: unknown }
-  return typeof withCode.code === 'string' ? withCode.code : null
+  const withCode = error as { code?: unknown; errorCode?: unknown; cause?: unknown }
+  if (typeof withCode.code === 'string') return withCode.code
+  if (typeof withCode.errorCode === 'string') return withCode.errorCode
+  if (withCode.cause && typeof withCode.cause === 'object') {
+    const nested = withCode.cause as { code?: unknown; errorCode?: unknown }
+    if (typeof nested.code === 'string') return nested.code
+    if (typeof nested.errorCode === 'string') return nested.errorCode
+  }
+  return null
 }
 
 function getErrorText(error: unknown): string {
@@ -86,12 +93,18 @@ function isMissingAuthSchemaError(error: unknown): boolean {
 
 function createAuthStorageError(error?: unknown): Error {
   const code = getErrorCode(error)
+  const message = getErrorText(error).toLowerCase()
 
-  if (code === 'P1000') {
+  if (code === 'P1000' || message.includes('authentication failed against database server')) {
     return new Error('Database authentication failed. Update DATABASE_URL and DIRECT_URL in Vercel and redeploy.')
   }
 
-  if (code === 'P1001') {
+  if (
+    code === 'P1001' ||
+    message.includes('can\'t reach database server') ||
+    message.includes('could not translate host name') ||
+    message.includes('nodename nor servname provided')
+  ) {
     return new Error('Database is unreachable. Verify your Neon host, SSL settings, and Vercel environment variables.')
   }
 
