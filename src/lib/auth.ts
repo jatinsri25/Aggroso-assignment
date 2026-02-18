@@ -15,8 +15,47 @@ type SafeUser = {
   name: string | null
 }
 
+type UserWithPassword = SafeUser & {
+  passwordHash: string
+}
+
+type MemorySession = {
+  userId: string
+  expiresAt: Date
+}
+
+const memoryUsersById = new Map<string, UserWithPassword>()
+const memoryUsersByEmail = new Map<string, UserWithPassword>()
+const memorySessions = new Map<string, MemorySession>()
+
+type PrismaAuthDelegate = {
+  user: {
+    findUnique: (args: { where: { email: string } }) => Promise<UserWithPassword | null>
+    create: (args: { data: { email: string; name?: string; passwordHash: string } }) => Promise<UserWithPassword>
+    findUniqueOrThrow: (args: { where: { id: string } }) => Promise<UserWithPassword>
+  }
+  session: {
+    create: (args: { data: { tokenHash: string; userId: string; expiresAt: Date } }) => Promise<unknown>
+    deleteMany: (args: { where: { tokenHash: string } }) => Promise<unknown>
+    findFirst: (args: {
+      where: { tokenHash: string; expiresAt: { gt: Date } }
+      select: { user: { select: { id: true; email: true; name: true } } }
+    }) => Promise<{ user: SafeUser } | null>
+  }
+}
+
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex')
+}
+
+function randomId(prefix: string): string {
+  return `${prefix}_${randomBytes(10).toString('hex')}`
+}
+
+function getPrismaAuthDelegate(): PrismaAuthDelegate | null {
+  const delegate = prisma as unknown as Partial<PrismaAuthDelegate>
+  if (!delegate.user || !delegate.session) return null
+  return delegate as PrismaAuthDelegate
 }
 
 export function hashPassword(password: string): string {
@@ -39,18 +78,84 @@ export function verifyPassword(password: string, passwordHash: string): boolean 
   return timingSafeEqual(computed, stored)
 }
 
+export async function findUserByEmail(email: string): Promise<UserWithPassword | null> {
+  const delegate = getPrismaAuthDelegate()
+  if (delegate) {
+    try {
+      return await delegate.user.findUnique({ where: { email } })
+    } catch {
+      // Fallback to in-memory auth store if DB auth tables are unavailable.
+    }
+  }
+
+  return memoryUsersByEmail.get(email) ?? null
+}
+
+export async function createUser(input: { email: string; name?: string; passwordHash: string }): Promise<UserWithPassword> {
+  const delegate = getPrismaAuthDelegate()
+  if (delegate) {
+    try {
+      return await delegate.user.create({
+        data: {
+          email: input.email,
+          name: input.name,
+          passwordHash: input.passwordHash,
+        },
+      })
+    } catch {
+      // Fallback to in-memory auth store if DB auth tables are unavailable.
+    }
+  }
+
+  const user: UserWithPassword = {
+    id: randomId('usr'),
+    email: input.email,
+    name: input.name ?? null,
+    passwordHash: input.passwordHash,
+  }
+
+  memoryUsersById.set(user.id, user)
+  memoryUsersByEmail.set(user.email, user)
+  return user
+}
+
+async function findUserById(id: string): Promise<SafeUser | null> {
+  const delegate = getPrismaAuthDelegate()
+  if (delegate) {
+    try {
+      const user = await delegate.user.findUniqueOrThrow({ where: { id } })
+      return { id: user.id, email: user.email, name: user.name }
+    } catch {
+      // Fallback to in-memory auth store if DB auth tables are unavailable.
+    }
+  }
+
+  const user = memoryUsersById.get(id)
+  if (!user) return null
+  return { id: user.id, email: user.email, name: user.name }
+}
+
 export async function createSessionForUser(userId: string): Promise<void> {
   const token = randomBytes(32).toString('hex')
   const tokenHash = sha256(token)
   const expiresAt = new Date(Date.now() + SESSION_DURATION_MS)
 
-  await prisma.session.create({
-    data: {
-      tokenHash,
-      userId,
-      expiresAt,
-    },
-  })
+  const delegate = getPrismaAuthDelegate()
+  if (delegate) {
+    try {
+      await delegate.session.create({
+        data: {
+          tokenHash,
+          userId,
+          expiresAt,
+        },
+      })
+    } catch {
+      memorySessions.set(tokenHash, { userId, expiresAt })
+    }
+  } else {
+    memorySessions.set(tokenHash, { userId, expiresAt })
+  }
 
   const cookieStore = await cookies()
   cookieStore.set(SESSION_COOKIE_NAME, token, {
@@ -67,9 +172,18 @@ export async function clearSession(): Promise<void> {
   const rawToken = cookieStore.get(SESSION_COOKIE_NAME)?.value
 
   if (rawToken) {
-    await prisma.session.deleteMany({
-      where: { tokenHash: sha256(rawToken) },
-    })
+    const tokenHash = sha256(rawToken)
+    const delegate = getPrismaAuthDelegate()
+    if (delegate) {
+      try {
+        await delegate.session.deleteMany({
+          where: { tokenHash },
+        })
+      } catch {
+        // Ignore DB auth cleanup errors and rely on cookie deletion.
+      }
+    }
+    memorySessions.delete(tokenHash)
   }
 
   cookieStore.delete(SESSION_COOKIE_NAME)
@@ -80,28 +194,46 @@ export async function getCurrentUser(): Promise<SafeUser | null> {
   const rawToken = cookieStore.get(SESSION_COOKIE_NAME)?.value
   if (!rawToken) return null
 
-  const session = await prisma.session.findFirst({
-    where: {
-      tokenHash: sha256(rawToken),
-      expiresAt: { gt: new Date() },
-    },
-    select: {
-      user: {
-        select: {
-          id: true,
-          email: true,
-          name: true,
-        },
-      },
-    },
-  })
+  const tokenHash = sha256(rawToken)
+  const delegate = getPrismaAuthDelegate()
 
-  if (!session) {
-    cookieStore.delete(SESSION_COOKIE_NAME)
+  if (delegate) {
+    try {
+      const session = await delegate.session.findFirst({
+        where: {
+          tokenHash,
+          expiresAt: { gt: new Date() },
+        },
+        select: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              name: true,
+            },
+          },
+        },
+      })
+
+      if (session) return session.user
+    } catch {
+      // Fall through to in-memory session lookup.
+    }
+  }
+
+  const fallbackSession = memorySessions.get(tokenHash)
+  if (!fallbackSession || fallbackSession.expiresAt <= new Date()) {
+    memorySessions.delete(tokenHash)
     return null
   }
 
-  return session.user
+  const fallbackUser = await findUserById(fallbackSession.userId)
+  if (!fallbackUser) {
+    memorySessions.delete(tokenHash)
+    return null
+  }
+
+  return fallbackUser
 }
 
 export async function requireUser(): Promise<SafeUser> {

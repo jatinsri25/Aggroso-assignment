@@ -1,8 +1,7 @@
 'use server'
 
 import { z } from 'zod'
-import { prisma } from '@/lib/db'
-import { clearSession, createSessionForUser, getCurrentUser, hashPassword, verifyPassword } from '@/lib/auth'
+import { clearSession, createSessionForUser, createUser, findUserByEmail, getCurrentUser, hashPassword, verifyPassword } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 
 export type AuthActionState = {
@@ -36,9 +35,7 @@ export async function signInAction(_prevState: AuthActionState, formData: FormDa
     return { error: parsed.error.issues[0]?.message ?? 'Invalid credentials' }
   }
 
-  const user = await prisma.user.findUnique({
-    where: { email: parsed.data.email.toLowerCase() },
-  })
+  const user = await findUserByEmail(parsed.data.email.toLowerCase())
 
   if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) {
     return { error: 'Invalid email or password' }
@@ -61,17 +58,15 @@ export async function signUpAction(_prevState: AuthActionState, formData: FormDa
 
   const email = parsed.data.email.toLowerCase()
 
-  const existing = await prisma.user.findUnique({ where: { email } })
+  const existing = await findUserByEmail(email)
   if (existing) {
     return { error: 'An account with this email already exists' }
   }
 
-  const user = await prisma.user.create({
-    data: {
-      name: parsed.data.name,
-      email,
-      passwordHash: hashPassword(parsed.data.password),
-    },
+  const user = await createUser({
+    name: parsed.data.name,
+    email,
+    passwordHash: hashPassword(parsed.data.password),
   })
 
   await createSessionForUser(user.id)

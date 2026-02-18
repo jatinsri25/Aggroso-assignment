@@ -22,7 +22,7 @@ vi.mock('@/lib/ratelimit', () => ({
 }));
 
 vi.mock('@/lib/auth', () => ({
-    requireUser: vi.fn().mockResolvedValue({ id: 'user-1', email: 'test@example.com', name: null }),
+    getCurrentUser: vi.fn().mockResolvedValue({ id: 'user-1', email: 'test@example.com', name: null }),
 }));
 
 // Mock AI SDK
