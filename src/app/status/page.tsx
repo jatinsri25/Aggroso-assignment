@@ -1,8 +1,10 @@
 import { prisma } from '@/lib/db'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import Link from 'next/link'
+import { requireUser } from '@/lib/auth'
 
 export default async function StatusPage() {
+    await requireUser()
     let dbStatus = 'Unknown'
     const geminiConfigured = Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY)
 
@@ -36,7 +38,7 @@ export default async function StatusPage() {
                             <div className={`h-3 w-3 rounded-full ${dbStatus === 'Healthy' ? 'bg-green-500' : 'bg-red-500'}`} />
                             <span>{dbStatus}</span>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-2">Checking connection to SQLite database.</p>
+                        <p className="text-xs text-muted-foreground mt-2">Checking connection to configured PostgreSQL database.</p>
                     </CardContent>
                 </Card>
 

@@ -3,6 +3,7 @@ import { getRecentSpecs } from "@/app/actions"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { AuthControls } from "@/components/auth-controls"
 
 export default async function Home() {
   const recentSpecs = await getRecentSpecs()
@@ -25,13 +26,14 @@ export default async function Home() {
             </p>
           </div>
 
-          <nav className="glow-card flex items-center gap-2 rounded-2xl p-2">
+          <nav className="glow-card flex flex-wrap items-center gap-2 rounded-2xl p-2">
             <Link href="/history">
               <Button variant="ghost">History</Button>
             </Link>
             <Link href="/status">
               <Button variant="ghost">Status</Button>
             </Link>
+            <AuthControls />
             <ThemeToggle />
           </nav>
         </header>

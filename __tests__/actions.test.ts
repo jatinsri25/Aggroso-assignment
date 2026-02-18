@@ -21,6 +21,10 @@ vi.mock('@/lib/ratelimit', () => ({
     rateLimit: vi.fn().mockResolvedValue({ success: true, remaining: 4, reset: Date.now() + 60000 }),
 }));
 
+vi.mock('@/lib/auth', () => ({
+    requireUser: vi.fn().mockResolvedValue({ id: 'user-1', email: 'test@example.com', name: null }),
+}));
+
 // Mock AI SDK
 vi.mock('ai', () => ({
     generateObject: vi.fn().mockResolvedValue({

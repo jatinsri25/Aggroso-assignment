@@ -1,11 +1,26 @@
 version: '3'
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=tasks_generator
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
   web:
     build: .
+    depends_on:
+      - db
     ports:
       - "3000:3000"
     environment:
       - GOOGLE_GENERATIVE_AI_API_KEY=${GOOGLE_GENERATIVE_AI_API_KEY}
-      - DATABASE_URL=file:/app/db/prod.db
-    volumes:
-      - ./db:/app/db
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/tasks_generator
+      - DIRECT_URL=postgresql://postgres:postgres@db:5432/tasks_generator
+
+volumes:
+  pgdata:

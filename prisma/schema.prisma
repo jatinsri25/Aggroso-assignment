@@ -15,5 +15,26 @@ model GeneratedSpec {
   constraints String?
   userStories String   // Stored as JSON string due to SQLite compatibility for ease of dev
   tasks       String   // Stored as JSON string
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
+}
+
+model User {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  name         String?
+  passwordHash String
+  specs        GeneratedSpec[]
+  sessions     Session[]
+  createdAt    DateTime       @default(now())
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
 }

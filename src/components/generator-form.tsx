@@ -70,7 +70,6 @@ export default function GeneratorForm() {
             formData.append("goal", goal)
             formData.append("users", users)
             formData.append("constraints", constraints)
-            formData.append("model", "gemini")
 
             const result = await generateSpecAction(null, formData) as GenerateSpecResult
 

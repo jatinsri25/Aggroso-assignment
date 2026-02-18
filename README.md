@@ -12,7 +12,7 @@ A web application that helps you plan software features by generating user stori
 3.  **Setup Environment Variables**:
     - Copy `.env.example` to `.env`
     - Add your Gemini API Key to `GOOGLE_GENERATIVE_AI_API_KEY`
-    - Ensure `DATABASE_URL` is set (defaults to local SQLite `file:./dev.db`)
+    - Ensure `DATABASE_URL` and `DIRECT_URL` are set for PostgreSQL
 4.  **Initialize Database**:
     ```bash
     npx prisma generate
@@ -40,13 +40,13 @@ If you prefer to run with Docker:
 - [x] **Export**: Copy to clipboard or download as Markdown.
 - [x] **History**: View last 5 generated specs.
 - [x] **Status Page**: Check DB and LLM connectivity.
+- [x] **Authentication**: Secure Login / Sign Up with session-based auth.
 - [x] **Risk Analysis**: AI provides a brief risk assessment.
 - [x] **Templates**: Quick-start templates for common app types.
 - [x] **Mock Mode**: Fallback generation when API key is missing.
 - [x] **Dark Mode**: Toggle between light and dark themes.
 
 ## Features (Not Done / Future Work)
-- [ ] User Authentication (currently open access).
 - [ ] Drag and Drop reordering (currently using buttons).
 - [ ] Persistent modifications (editing only affects local view until re-generated, save functionality for edits is not fully implemented in DB, only initial generation is saved).
 

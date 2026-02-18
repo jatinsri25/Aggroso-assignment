@@ -6,6 +6,7 @@ import { generateObject } from 'ai'
 import { z } from 'zod'
 import { revalidatePath } from 'next/cache'
 import { rateLimit } from '@/lib/ratelimit'
+import { requireUser } from '@/lib/auth'
 
 // Schema for the input
 const InputSchema = z.object({
@@ -62,6 +63,7 @@ function isRecoverableGeminiError(error: unknown): boolean {
 }
 
 export async function generateSpecAction(prevState: any, formData: FormData) {
+    const user = await requireUser()
     const goal = formData.get('goal') as string
     const users = formData.get('users') as string
     const constraints = formData.get('constraints') as string || undefined
@@ -69,7 +71,7 @@ export async function generateSpecAction(prevState: any, formData: FormData) {
 
     // 1. Rate Limiting
     const limitParams = { interval: 60 * 1000, limit: 5 }; // 5 requests per minute
-    const rateLimitResult = await rateLimit('global_demo_user', limitParams);
+    const rateLimitResult = await rateLimit(`user:${user.id}`, limitParams);
 
     if (!rateLimitResult.success) {
         return {
@@ -114,6 +116,7 @@ export async function generateSpecAction(prevState: any, formData: FormData) {
                     constraints: vConstraints,
                     userStories: JSON.stringify(mockData.userStories),
                     tasks: JSON.stringify(mockData.tasks),
+                    userId: user.id,
                     createdAt: new Date(),
                 },
             })
@@ -182,6 +185,7 @@ export async function generateSpecAction(prevState: any, formData: FormData) {
                         constraints: vConstraints,
                         userStories: JSON.stringify(spec.userStories),
                         tasks: JSON.stringify(spec.tasks),
+                        userId: user.id,
                         createdAt: new Date(),
                     },
                 })
@@ -216,8 +220,10 @@ export async function generateSpecAction(prevState: any, formData: FormData) {
 }
 
 export async function getRecentSpecs() {
+    const user = await requireUser()
     try {
         const specs = await prisma.generatedSpec.findMany({
+            where: { userId: user.id },
             orderBy: { createdAt: 'desc' },
             take: 5,
         })
