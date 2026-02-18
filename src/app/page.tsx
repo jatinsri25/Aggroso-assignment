@@ -4,8 +4,15 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { AuthControls } from "@/components/auth-controls"
+import { getCurrentUser } from "@/lib/auth"
+import { redirect } from "next/navigation"
 
 export default async function Home() {
+  const user = await getCurrentUser()
+  if (!user) {
+    redirect('/login')
+  }
+
   const recentSpecs = await getRecentSpecs()
 
   return (

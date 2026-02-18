@@ -26,51 +26,63 @@ const signUpSchema = z.object({
 })
 
 export async function signInAction(_prevState: AuthActionState, formData: FormData): Promise<AuthActionState> {
-  const parsed = signInSchema.safeParse({
-    email: formData.get('email'),
-    password: formData.get('password'),
-  })
+  try {
+    const parsed = signInSchema.safeParse({
+      email: formData.get('email'),
+      password: formData.get('password'),
+    })
 
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? 'Invalid credentials' }
+    if (!parsed.success) {
+      return { error: parsed.error.issues[0]?.message ?? 'Invalid credentials' }
+    }
+
+    const user = await findUserByEmail(parsed.data.email.toLowerCase())
+
+    if (!user) {
+      return { error: 'No account found for this email. Please sign up first.' }
+    }
+
+    if (!verifyPassword(parsed.data.password, user.passwordHash)) {
+      return { error: 'Incorrect password. Please try again.' }
+    }
+
+    await createSessionForUser(user.id)
+    redirect('/')
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Login failed. Please try again.' }
   }
-
-  const user = await findUserByEmail(parsed.data.email.toLowerCase())
-
-  if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) {
-    return { error: 'Invalid email or password' }
-  }
-
-  await createSessionForUser(user.id)
-  redirect('/')
 }
 
 export async function signUpAction(_prevState: AuthActionState, formData: FormData): Promise<AuthActionState> {
-  const parsed = signUpSchema.safeParse({
-    name: formData.get('name')?.toString().trim() || undefined,
-    email: formData.get('email'),
-    password: formData.get('password'),
-  })
+  try {
+    const parsed = signUpSchema.safeParse({
+      name: formData.get('name')?.toString().trim() || undefined,
+      email: formData.get('email'),
+      password: formData.get('password'),
+    })
 
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? 'Invalid signup data' }
+    if (!parsed.success) {
+      return { error: parsed.error.issues[0]?.message ?? 'Invalid signup data' }
+    }
+
+    const email = parsed.data.email.toLowerCase()
+
+    const existing = await findUserByEmail(email)
+    if (existing) {
+      return { error: 'An account with this email already exists' }
+    }
+
+    const user = await createUser({
+      name: parsed.data.name,
+      email,
+      passwordHash: hashPassword(parsed.data.password),
+    })
+
+    await createSessionForUser(user.id)
+    redirect('/')
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Signup failed. Please try again.' }
   }
-
-  const email = parsed.data.email.toLowerCase()
-
-  const existing = await findUserByEmail(email)
-  if (existing) {
-    return { error: 'An account with this email already exists' }
-  }
-
-  const user = await createUser({
-    name: parsed.data.name,
-    email,
-    passwordHash: hashPassword(parsed.data.password),
-  })
-
-  await createSessionForUser(user.id)
-  redirect('/')
 }
 
 export async function signOutAction(): Promise<void> {

@@ -27,6 +27,9 @@ type MemorySession = {
 const memoryUsersById = new Map<string, UserWithPassword>()
 const memoryUsersByEmail = new Map<string, UserWithPassword>()
 const memorySessions = new Map<string, MemorySession>()
+const allowMemoryFallback = process.env.NODE_ENV !== 'production'
+const authStorageErrorMessage =
+  'Authentication storage is not initialized. Apply Prisma schema to your database and retry.'
 
 type PrismaAuthDelegate = {
   user: {
@@ -58,6 +61,12 @@ function getPrismaAuthDelegate(): PrismaAuthDelegate | null {
   return delegate as PrismaAuthDelegate
 }
 
+function assertAuthStorageAvailable(): void {
+  if (!allowMemoryFallback) {
+    throw new Error(authStorageErrorMessage)
+  }
+}
+
 export function hashPassword(password: string): string {
   const salt = randomBytes(16).toString('hex')
   const hash = pbkdf2Sync(password, salt, PASSWORD_ITERATIONS, KEY_LENGTH, DIGEST).toString('hex')
@@ -84,8 +93,10 @@ export async function findUserByEmail(email: string): Promise<UserWithPassword |
     try {
       return await delegate.user.findUnique({ where: { email } })
     } catch {
-      // Fallback to in-memory auth store if DB auth tables are unavailable.
+      assertAuthStorageAvailable()
     }
+  } else {
+    assertAuthStorageAvailable()
   }
 
   return memoryUsersByEmail.get(email) ?? null
@@ -103,8 +114,10 @@ export async function createUser(input: { email: string; name?: string; password
         },
       })
     } catch {
-      // Fallback to in-memory auth store if DB auth tables are unavailable.
+      assertAuthStorageAvailable()
     }
+  } else {
+    assertAuthStorageAvailable()
   }
 
   const user: UserWithPassword = {
@@ -126,8 +139,10 @@ async function findUserById(id: string): Promise<SafeUser | null> {
       const user = await delegate.user.findUniqueOrThrow({ where: { id } })
       return { id: user.id, email: user.email, name: user.name }
     } catch {
-      // Fallback to in-memory auth store if DB auth tables are unavailable.
+      assertAuthStorageAvailable()
     }
+  } else {
+    assertAuthStorageAvailable()
   }
 
   const user = memoryUsersById.get(id)
@@ -151,9 +166,11 @@ export async function createSessionForUser(userId: string): Promise<void> {
         },
       })
     } catch {
+      assertAuthStorageAvailable()
       memorySessions.set(tokenHash, { userId, expiresAt })
     }
   } else {
+    assertAuthStorageAvailable()
     memorySessions.set(tokenHash, { userId, expiresAt })
   }
 
@@ -180,6 +197,7 @@ export async function clearSession(): Promise<void> {
           where: { tokenHash },
         })
       } catch {
+        assertAuthStorageAvailable()
         // Ignore DB auth cleanup errors and rely on cookie deletion.
       }
     }
@@ -217,8 +235,10 @@ export async function getCurrentUser(): Promise<SafeUser | null> {
 
       if (session) return session.user
     } catch {
-      // Fall through to in-memory session lookup.
+      assertAuthStorageAvailable()
     }
+  } else {
+    assertAuthStorageAvailable()
   }
 
   const fallbackSession = memorySessions.get(tokenHash)
