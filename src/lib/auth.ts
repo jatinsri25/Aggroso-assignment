@@ -30,6 +30,7 @@ const memorySessions = new Map<string, MemorySession>()
 const allowMemoryFallback = process.env.NODE_ENV !== 'production'
 const authStorageErrorMessage =
   'Authentication storage is not initialized. Apply Prisma schema to your database and retry.'
+let authSchemaBootstrapPromise: Promise<void> | null = null
 
 type PrismaAuthDelegate = {
   user: {
@@ -61,9 +62,114 @@ function getPrismaAuthDelegate(): PrismaAuthDelegate | null {
   return delegate as PrismaAuthDelegate
 }
 
-function assertAuthStorageAvailable(): void {
-  if (!allowMemoryFallback) {
-    throw new Error(authStorageErrorMessage)
+function getErrorCode(error: unknown): string | null {
+  if (typeof error !== 'object' || error === null) return null
+  const withCode = error as { code?: unknown }
+  return typeof withCode.code === 'string' ? withCode.code : null
+}
+
+function getErrorText(error: unknown): string {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
+function isMissingAuthSchemaError(error: unknown): boolean {
+  const code = getErrorCode(error)
+  if (code === 'P2021' || code === 'P2022') return true
+
+  const message = getErrorText(error).toLowerCase()
+  return (
+    (message.includes('relation') && message.includes('does not exist')) ||
+    message.includes('table does not exist')
+  )
+}
+
+function createAuthStorageError(error?: unknown): Error {
+  const code = getErrorCode(error)
+
+  if (code === 'P1000') {
+    return new Error('Database authentication failed. Update DATABASE_URL and DIRECT_URL in Vercel and redeploy.')
+  }
+
+  if (code === 'P1001') {
+    return new Error('Database is unreachable. Verify your Neon host, SSL settings, and Vercel environment variables.')
+  }
+
+  if (isMissingAuthSchemaError(error)) {
+    return new Error(authStorageErrorMessage)
+  }
+
+  return new Error(authStorageErrorMessage)
+}
+
+function assertAuthStorageAvailable(error?: unknown): void {
+  if (!allowMemoryFallback) throw createAuthStorageError(error)
+}
+
+async function ensureAuthSchema(): Promise<void> {
+  if (authSchemaBootstrapPromise) {
+    return authSchemaBootstrapPromise
+  }
+
+  authSchemaBootstrapPromise = (async () => {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "User" (
+        "id" TEXT NOT NULL,
+        "email" TEXT NOT NULL,
+        "name" TEXT,
+        "passwordHash" TEXT NOT NULL,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+      );
+    `)
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email");`)
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "Session" (
+        "id" TEXT NOT NULL,
+        "tokenHash" TEXT NOT NULL,
+        "userId" TEXT NOT NULL,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "expiresAt" TIMESTAMP(3) NOT NULL,
+        CONSTRAINT "Session_pkey" PRIMARY KEY ("id")
+      );
+    `)
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "Session_tokenHash_key" ON "Session"("tokenHash");`)
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Session_userId_idx" ON "Session"("userId");`)
+    await prisma.$executeRawUnsafe(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conname = 'Session_userId_fkey'
+        ) THEN
+          ALTER TABLE "Session"
+          ADD CONSTRAINT "Session_userId_fkey"
+          FOREIGN KEY ("userId") REFERENCES "User"("id")
+          ON DELETE CASCADE ON UPDATE CASCADE;
+        END IF;
+      END
+      $$;
+    `)
+  })()
+    .catch((error) => {
+      authSchemaBootstrapPromise = null
+      throw error
+    })
+
+  return authSchemaBootstrapPromise
+}
+
+async function withSchemaBootstrap<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation()
+  } catch (error) {
+    if (isMissingAuthSchemaError(error)) {
+      await ensureAuthSchema()
+      return operation()
+    }
+    throw error
   }
 }
 
@@ -91,9 +197,9 @@ export async function findUserByEmail(email: string): Promise<UserWithPassword |
   const delegate = getPrismaAuthDelegate()
   if (delegate) {
     try {
-      return await delegate.user.findUnique({ where: { email } })
-    } catch {
-      assertAuthStorageAvailable()
+      return await withSchemaBootstrap(() => delegate.user.findUnique({ where: { email } }))
+    } catch (error) {
+      assertAuthStorageAvailable(error)
     }
   } else {
     assertAuthStorageAvailable()
@@ -106,15 +212,15 @@ export async function createUser(input: { email: string; name?: string; password
   const delegate = getPrismaAuthDelegate()
   if (delegate) {
     try {
-      return await delegate.user.create({
+      return await withSchemaBootstrap(() => delegate.user.create({
         data: {
           email: input.email,
           name: input.name,
           passwordHash: input.passwordHash,
         },
-      })
-    } catch {
-      assertAuthStorageAvailable()
+      }))
+    } catch (error) {
+      assertAuthStorageAvailable(error)
     }
   } else {
     assertAuthStorageAvailable()
@@ -136,10 +242,10 @@ async function findUserById(id: string): Promise<SafeUser | null> {
   const delegate = getPrismaAuthDelegate()
   if (delegate) {
     try {
-      const user = await delegate.user.findUniqueOrThrow({ where: { id } })
+      const user = await withSchemaBootstrap(() => delegate.user.findUniqueOrThrow({ where: { id } }))
       return { id: user.id, email: user.email, name: user.name }
-    } catch {
-      assertAuthStorageAvailable()
+    } catch (error) {
+      assertAuthStorageAvailable(error)
     }
   } else {
     assertAuthStorageAvailable()
@@ -158,15 +264,15 @@ export async function createSessionForUser(userId: string): Promise<void> {
   const delegate = getPrismaAuthDelegate()
   if (delegate) {
     try {
-      await delegate.session.create({
+      await withSchemaBootstrap(() => delegate.session.create({
         data: {
           tokenHash,
           userId,
           expiresAt,
         },
-      })
-    } catch {
-      assertAuthStorageAvailable()
+      }))
+    } catch (error) {
+      assertAuthStorageAvailable(error)
       memorySessions.set(tokenHash, { userId, expiresAt })
     }
   } else {
@@ -193,11 +299,11 @@ export async function clearSession(): Promise<void> {
     const delegate = getPrismaAuthDelegate()
     if (delegate) {
       try {
-        await delegate.session.deleteMany({
+        await withSchemaBootstrap(() => delegate.session.deleteMany({
           where: { tokenHash },
-        })
-      } catch {
-        assertAuthStorageAvailable()
+        }))
+      } catch (error) {
+        assertAuthStorageAvailable(error)
         // Ignore DB auth cleanup errors and rely on cookie deletion.
       }
     }
@@ -217,7 +323,7 @@ export async function getCurrentUser(): Promise<SafeUser | null> {
 
   if (delegate) {
     try {
-      const session = await delegate.session.findFirst({
+      const session = await withSchemaBootstrap(() => delegate.session.findFirst({
         where: {
           tokenHash,
           expiresAt: { gt: new Date() },
@@ -231,14 +337,15 @@ export async function getCurrentUser(): Promise<SafeUser | null> {
             },
           },
         },
-      })
+      }))
 
       if (session) return session.user
     } catch {
-      assertAuthStorageAvailable()
+      // Never crash rendering for an auth read; behave as signed out.
+      return null
     }
   } else {
-    assertAuthStorageAvailable()
+    if (!allowMemoryFallback) return null
   }
 
   const fallbackSession = memorySessions.get(tokenHash)
